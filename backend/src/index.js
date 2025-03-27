@@ -4,13 +4,14 @@ dotenv.config();
 import { connectDB } from "./lib/db.js";
 import { clerkMiddleware } from "@clerk/express";
 import fileUpload from "express-fileupload";
-import path from "path";
 import cors from "cors";
 import fs from "fs";
 import express from "express";
 import { createServer } from "http";
 import cron from "node-cron";
 import { initializeSocket } from "./lib/socket.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import userRoutes from "./routes/user.route.js";
 import authRoutes from "./routes/auth.route.js";
@@ -20,14 +21,17 @@ import albumRoutes from "./routes/album.route.js";
 import statRoutes from "./routes/stat.route.js";
 
 const app = express();
-app.use(express.json());
-app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
-app.use(clerkMiddleware());
-
 const httpServer = createServer(app);
 initializeSocket(httpServer);
 
-const __dirname = path.resolve();
+// Fix __dirname for ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(express.json());
+app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
+app.use(clerkMiddleware());
 
 // File Upload Middleware
 app.use(
@@ -39,29 +43,23 @@ app.use(
   })
 );
 
+// Cleanup temp files (cron job)
 const tempDir = path.join(process.cwd(), "tmp");
-// cron jobs
-cron.schedule("0 * * * * ", () => {
+cron.schedule("0 * * * *", () => {
   if (fs.existsSync(tempDir)) {
     fs.readdir(tempDir, (err, files) => {
       if (err) {
-        console.log("error", err);
+        console.error("Temp cleanup error:", err);
         return;
       }
-      for (const file of files) {
-        fs.unlink(path.join(tempDir, file), (err) => {});
-      }
+      files.forEach((file) => {
+        fs.unlink(path.join(tempDir, file), (err) => {
+          if (err) console.error("Error deleting temp file:", err);
+        });
+      });
     });
   }
 });
-
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-if (process.env.NODE_ENV === "production") {
-  app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname, "../frontend/dist/index.html"));
-  });
-}
 
 // Routes
 app.use("/api/users", userRoutes);
@@ -70,6 +68,19 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/songs", songRoutes);
 app.use("/api/albums", albumRoutes);
 app.use("/api/stats", statRoutes);
+
+// Production: Serve Frontend (Only if deployed together)
+if (process.env.NODE_ENV === "production") {
+  const frontendPath = path.join(__dirname, "../frontend/dist");
+  if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.resolve(frontendPath, "index.html"));
+    });
+  } else {
+    console.warn("⚠️ Frontend build folder not found!");
+  }
+}
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -82,6 +93,7 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Start Server
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, async () => {
   console.log(`🚀 Server running on PORT: ${PORT}`);
