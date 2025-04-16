@@ -1,7 +1,7 @@
+import { useEffect, useRef } from "react";
 import Topbar from "@/components/Topbar";
 import { useChatStore } from "@/stores/useChatStore";
 import { useUser } from "@clerk/clerk-react";
-import { useEffect } from "react";
 import UserList from "./components/UserList";
 import ChatHeader from "./components/ChatHeader";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,6 +27,8 @@ const ChatPage = () => {
     disconnectSocket,
   } = useChatStore();
 
+  const messagesEndRef = useRef<HTMLDivElement | null>(null); // Ref to scroll to the bottom
+
   useEffect(() => {
     if (user?.id) {
       fetchUsers();
@@ -43,6 +45,13 @@ const ChatPage = () => {
       fetchMessages(selectedUser.clerkId);
     }
   }, [selectedUser, fetchMessages]);
+
+  useEffect(() => {
+    // Scroll to the bottom of the messages container when new messages arrive
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]); // Triggered whenever the messages change
 
   return (
     <main className="h-full rounded-lg bg-gradient-to-b from-zinc-800 to-zinc-900 overflow-hidden">
@@ -88,6 +97,7 @@ const ChatPage = () => {
                       </div>
                     </div>
                   ))}
+                  <div ref={messagesEndRef} /> {/* Empty div to scroll to */}
                 </div>
               </ScrollArea>
               <MessageInput />

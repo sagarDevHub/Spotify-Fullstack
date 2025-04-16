@@ -123,9 +123,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  // sendMessage: (receiverId, senderId, content) => {
+  //   const socket = get().socket;
+  //   if (!socket) return;
+  //   socket.emit("send_message", { receiverId, senderId, content });
+  // },
+
   sendMessage: (receiverId, senderId, content) => {
     const socket = get().socket;
     if (!socket) return;
+
+    const tempMessage = {
+      _id: `${Date.now()}`, // Temporary unique ID
+      senderId,
+      receiverId,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistically update UI
+    set((state) => ({
+      messages: [...state.messages, tempMessage],
+    }));
+
+    // Emit to server
     socket.emit("send_message", { receiverId, senderId, content });
   },
 
